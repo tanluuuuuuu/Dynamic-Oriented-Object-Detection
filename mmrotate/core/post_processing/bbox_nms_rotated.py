@@ -54,7 +54,7 @@ def multiclass_nms_rotated(multi_bboxes,
         score_factors = score_factors.reshape(-1)
         scores = scores * score_factors
 
-    inds = valid_mask.nonzero(as_tuple=False).squeeze(1)
+    inds = valid_mask.nonzero(as_tuple=False).squeeze(1).to('cpu')
     bboxes, scores, labels = bboxes[inds], scores[inds], labels[inds]
 
     if bboxes.numel() == 0:
@@ -82,6 +82,7 @@ def multiclass_nms_rotated(multi_bboxes,
     if max_num > 0:
         keep = keep[:max_num]
 
+    keep = keep.to('cpu')
     bboxes = bboxes[keep]
     scores = scores[keep]
     labels = labels[keep]
