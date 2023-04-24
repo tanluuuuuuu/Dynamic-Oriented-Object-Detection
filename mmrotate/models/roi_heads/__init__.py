@@ -13,10 +13,11 @@ from .dynamic_roi_trans_roi_head_v2 import DynamicRoITransRoIHeadv2
 from .dynamic_roi_trans_roi_head_v3 import DynamicRoITransRoIHeadv3
 from .dynamic_roi_trans_roi_head_v4 import DynamicRoITransRoIHeadv4
 from .oriented_standard_roi_head_examine import OrientedStandardRoIHeadExamine
+from .roi_trans_roi_head_examine import RoITransRoIHeadExamine
 
 __all__ = [
     'RotatedBBoxHead', 'RotatedConvFCBBoxHead', 'RotatedShared2FCBBoxHead',
     'RotatedStandardRoIHead', 'RotatedSingleRoIExtractor',
     'OrientedStandardRoIHead', 'RoITransRoIHead', 'GVRatioRoIHead', 'OrientedDynamicRoIHead', 'OrientedDynamicRoIHeadv2','DynamicRoITransRoIHead',
-    'DynamicRoITransRoIHeadv2', 'DynamicRoITransRoIHeadv3', 'DynamicRoITransRoIHeadv4', 'OrientedStandardRoIHeadExamine'
+    'DynamicRoITransRoIHeadv2', 'DynamicRoITransRoIHeadv3', 'DynamicRoITransRoIHeadv4', 'OrientedStandardRoIHeadExamine', 'RoITransRoIHeadExamine'
 ]

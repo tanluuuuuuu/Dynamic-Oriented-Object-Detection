@@ -11,7 +11,7 @@ from ..builder import ROTATED_HEADS, build_head, build_roi_extractor
 
 
 @ROTATED_HEADS.register_module()
-class RoITransRoIHead(BaseModule, metaclass=ABCMeta):
+class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
     """RoI Trans cascade roi head including one bbox head.
 
     Args:
@@ -43,7 +43,7 @@ class RoITransRoIHead(BaseModule, metaclass=ABCMeta):
         assert shared_head is None, \
             'Shared head is not supported in Cascade RCNN anymore'
 
-        super(RoITransRoIHead, self).__init__(init_cfg)
+        super(RoITransRoIHeadExamine, self).__init__(init_cfg)
         self.num_stages = num_stages
         self.stage_loss_weights = stage_loss_weights
         self.train_cfg = train_cfg
@@ -234,6 +234,10 @@ class RoITransRoIHead(BaseModule, metaclass=ABCMeta):
                                 sampling_result.pos_assigned_gt_inds, :]
 
                     sampling_results.append(sampling_result)
+                    if i == 0:
+                        f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/check_num_pos.txt", 'a')
+                        f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
+                        f.close()
 
             # bbox head forward and loss
             bbox_results = self._bbox_forward_train(i, x, sampling_results,
