@@ -60,7 +60,6 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
         """
         # assign gts and sample proposals
         if self.with_bbox:
-
             num_imgs = len(img_metas)
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
@@ -84,10 +83,13 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
                     sampling_result.pos_gt_bboxes = \
                         gt_bboxes[i][sampling_result.pos_assigned_gt_inds, :]
                 sampling_results.append(sampling_result)
-                f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_num_pos.txt", 'a')
-                f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
-                f.close()
-
+                # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_num_pos.txt", 'a')
+                # f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
+                # f.close()
+        # bbox_results['bbox_pred']
+        # bbox_results['cls_score']
+        # torch.mean(bbox_results['bbox_pred'][:, 0]).item()
+        # breakpoint()
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
@@ -95,7 +97,10 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
                                                     gt_bboxes, gt_labels,
                                                     img_metas)
             losses.update(bbox_results['loss_bbox'])
-
+            f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_xywha.txt", 'a')
+            for box in bbox_results['bbox_pred']:
+                f.write(f"{box[0]}\t{box[1]}\t{box[2]}\t{box[3]}\t{box[4]}\n")
+            f.close()
         return losses
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
@@ -115,11 +120,55 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
         Returns:
             dict[str, Tensor]: a dictionary of bbox_results.
         """
+        # breakpoint()
         rois = rbbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
 
+        """Calculate the ground truth for all samples in a batch according to
+        the sampling_results.
+
+        Almost the same as the implementation in bbox_head, we passed
+        additional parameters pos_inds_list and neg_inds_list to
+        `_get_target_single` function.
+
+        Args:
+            sampling_results (List[obj:SamplingResults]): Assign results of
+                all images in a batch after sampling.
+            gt_bboxes (list[Tensor]): Gt_bboxes of all images in a batch,
+                each tensor has shape (num_gt, 5),  the last dimension 5
+                represents [cx, cy, w, h, a].
+            gt_labels (list[Tensor]): Gt_labels of all images in a batch,
+                each tensor has shape (num_gt,).
+            rcnn_train_cfg (obj:ConfigDict): `train_cfg` of RCNN.
+            concat (bool): Whether to concatenate the results of all
+                the images in a single batch.
+
+        Returns:
+            Tuple[Tensor]: Ground truth for proposals in a single image.
+            Containing the following list of Tensors:
+
+                - labels (list[Tensor],Tensor): Gt_labels for all
+                  proposals in a batch, each tensor in list has
+                  shape (num_proposals,) when `concat=False`, otherwise
+                  just a single tensor has shape (num_all_proposals,).
+                - label_weights (list[Tensor]): Labels_weights for
+                  all proposals in a batch, each tensor in list has
+                  shape (num_proposals,) when `concat=False`, otherwise
+                  just a single tensor has shape (num_all_proposals,).
+                - bbox_targets (list[Tensor],Tensor): Regression target
+                  for all proposals in a batch, each tensor in list
+                  has shape (num_proposals, 5) when `concat=False`,
+                  otherwise just a single tensor has shape
+                  (num_all_proposals, 5), the last dimension 4 represents
+                  [cx, cy, w, h, a].
+                - bbox_weights (list[tensor],Tensor): Regression weights for
+                  all proposals in a batch, each tensor in list has shape
+                  (num_proposals, 5) when `concat=False`, otherwise just a
+                  single tensor has shape (num_all_proposals, 5).
+        """
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
+        
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
                                         bbox_results['bbox_pred'], rois,
                                         *bbox_targets)

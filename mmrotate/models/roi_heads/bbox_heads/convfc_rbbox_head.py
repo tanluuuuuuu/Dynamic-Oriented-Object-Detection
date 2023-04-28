@@ -167,6 +167,7 @@ class RotatedConvFCBBoxHead(RotatedBBoxHead):
 
     def forward(self, x):
         """Forward function."""
+        
         if self.num_shared_convs > 0:
             for conv in self.shared_convs:
                 x = conv(x)
