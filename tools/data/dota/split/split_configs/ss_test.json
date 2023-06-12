@@ -1,7 +1,7 @@
 {
   "nproc": 10,
   "img_dirs": [
-    "data/DOTA/test/images/"
+    "/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_full/test/images"
   ],
   "ann_dirs": null,
   "sizes": [
@@ -21,6 +21,6 @@
     116,
     124
   ],
-  "save_dir": "data/split_ss_dota/test/",
+  "save_dir": "/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_full/split_ss_dota/test/",
   "save_ext": ".png"
 }

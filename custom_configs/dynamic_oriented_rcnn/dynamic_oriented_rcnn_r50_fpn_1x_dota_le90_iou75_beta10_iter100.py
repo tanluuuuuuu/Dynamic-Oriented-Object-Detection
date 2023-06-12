@@ -43,8 +43,8 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='DOTADataset',
-        ann_file='./data_train/Dataset/DOTA_split/train/annfiles/',
-        img_prefix='./data_train/Dataset/DOTA_split/train/images/',
+        ann_file='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/annotations',
+        img_prefix='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/images',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True),
@@ -66,8 +66,8 @@ data = dict(
         version='le90'),
     val=dict(
         type='DOTADataset',
-        ann_file='./data_train/Dataset/DOTA_split/val/annfiles/',
-        img_prefix='./data_train/Dataset/DOTA_split/val/images/',
+        ann_file='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/annotations',
+        img_prefix='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/images',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(
@@ -89,8 +89,8 @@ data = dict(
         version='le90'),
     test=dict(
         type='DOTADataset',
-        ann_file='../Dataset/DOTA_split/test/images/',
-        img_prefix='../Dataset/DOTA_split/test/images/',	
+        ann_file='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/images',
+        img_prefix='/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/data_small/images',	
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(
@@ -119,8 +119,8 @@ lr_config = dict(
     warmup_iters=500,
     warmup_ratio=0.3333333333333333,
     step=[8, 11])
-runner = dict(type='EpochBasedRunner', max_epochs=12)
-checkpoint_config = dict(interval=1)
+runner = dict(type='EpochBasedRunner', max_epochs=100)
+checkpoint_config = dict(interval=50)
 log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
