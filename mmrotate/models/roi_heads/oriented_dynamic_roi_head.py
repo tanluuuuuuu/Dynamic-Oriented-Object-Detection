@@ -77,7 +77,6 @@ class OrientedDynamicRoIHead(OrientedStandardRoIHead):
             sampling_results = []
             cur_iou = []
             for i in range(num_imgs):
-                # pdb.set_trace()
                 assign_result = self.bbox_assigner.assign(
                     proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
                     gt_labels[i])
@@ -92,6 +91,9 @@ class OrientedDynamicRoIHead(OrientedStandardRoIHead):
                                len(assign_result.max_overlaps))
                 ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
                 cur_iou.append(ious[-1].item())
+                f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/dynamic_oriented_rcnn_r50_fpn_1x_dota_le90_iou75_beta10_iter100/75th_iou.txt", 'a')
+                f.write(f"{str(ious[-1].item())}\n")
+                f.close()
 
                 if gt_bboxes[i].numel() == 0:
                     sampling_result.pos_gt_bboxes = gt_bboxes[i].new(
@@ -101,6 +103,9 @@ class OrientedDynamicRoIHead(OrientedStandardRoIHead):
                         gt_bboxes[i][sampling_result.pos_assigned_gt_inds, :]
 
                 sampling_results.append(sampling_result)
+                # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/dynamic_oriented_rcnn_r50_fpn_1x_dota_le90_iou75_beta10_iter100/check_num_pos_v2.txt", 'a')
+                # f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
+                # f.close()
             cur_iou = np.mean(cur_iou)
             self.iou_history.append(cur_iou)
         losses = dict()
@@ -115,9 +120,9 @@ class OrientedDynamicRoIHead(OrientedStandardRoIHead):
         update_iter_interval = self.train_cfg.dynamic_rcnn.update_iter_interval
         if len(self.iou_history) % update_iter_interval == 0:
             new_iou_thr, new_beta = self.update_hyperparameters()
-            f = open(os.path.join(self.train_cfg.dynamic_rcnn.save_dir, "update_hyperparameters.txt"), 'a')
-            f.write(f"{str(new_iou_thr)}, {str(new_beta)} \n")
-            f.close()
+            # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/dynamic_oriented_rcnn_r50_fpn_1x_dota_le90_iou75_beta10_iter100/update_hyperparameters.txt", 'a')
+            # f.write(f"{str(new_iou_thr)}, {str(new_beta)} \n")
+            # f.close()
         return losses
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,

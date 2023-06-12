@@ -61,8 +61,8 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
         self.init_assigner_sampler()
 
         self.with_bbox = True if self.bbox_head is not None else False
-        self.iou_history = []
-        self.beta_history = []
+        self.iou_history = [[], []]
+        self.beta_history = [[], []]
 
     def init_bbox_head(self, bbox_roi_extractor, bbox_head):
         """Initialize box head and box roi extractor.
@@ -219,6 +219,7 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
             sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg)
         
         if (is_dynamic):
+            # breakpoint()
             num_imgs = len(img_metas)
             pos_inds = bbox_targets[3][:, 0].nonzero().squeeze(1)
             num_pos = len(pos_inds)
@@ -226,7 +227,7 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
             beta_topk = min(self.train_cfg[stage].dynamic_rcnn.beta_topk * num_imgs,
                             num_pos)
             cur_target = torch.kthvalue(cur_target, beta_topk)[0].item()
-            self.beta_history.append(cur_target)
+            self.beta_history[stage].append(cur_target)
         
         loss_bbox = self.bbox_head[stage].loss(bbox_results['cls_score'],
                                                bbox_results['bbox_pred'], rois,
@@ -273,7 +274,7 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
 
             # assign gts and sample proposals
             sampling_results = []
-            cur_iou = []
+            cur_iou = [[], []]
             
             if self.with_bbox:
                 bbox_assigner = self.bbox_assigner[i]
@@ -301,7 +302,7 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
                         iou_topk = min(self.train_cfg[i].dynamic_rcnn.iou_topk,
                                     len(assign_result.max_overlaps))
                         ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
-                        cur_iou.append(ious[-1].item())
+                        cur_iou[i].append(ious[-1].item())
                     
                     if gt_bboxes[j].numel() == 0:
                         sampling_result.pos_gt_bboxes = gt_bboxes[j].new(
@@ -312,9 +313,10 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
                                 sampling_result.pos_assigned_gt_inds, :]
 
                     sampling_results.append(sampling_result)
+
                 if 'dynamic_rcnn' in self.train_cfg[i]:
                     cur_iou = np.mean(cur_iou)
-                    self.iou_history.append(cur_iou)
+                    self.iou_history[i].append(cur_iou)
             # bbox head forward and loss
             bbox_results = self._bbox_forward_train(i, x, sampling_results,
                                                     gt_bboxes, gt_labels,
@@ -346,10 +348,10 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
                     
             if 'dynamic_rcnn' in self.train_cfg[i]:
                 update_iter_interval = self.train_cfg[i].dynamic_rcnn.update_iter_interval
-                if len(self.iou_history) % update_iter_interval == 0:
+                if len(self.iou_history[i]) % update_iter_interval == 0:
                     new_iou_thr, new_beta = self.update_hyperparameters(i)
                     # Writing data to a file
-                    f = open(os.path.join(self.train_cfg[i].dynamic_rcnn.save_dir, "update_hyperparameters.txt"), 'a')
+                    f = open(os.path.join(self.train_cfg[i].dynamic_rcnn.save_dir, f"update_hyperparameters_{i}.txt"), 'a')
                     f.write(f"{str(new_iou_thr)}, {str(new_beta)} \n")
                     f.close()
         return losses
@@ -454,21 +456,21 @@ class DynamicRoITransRoIHeadv2(BaseModule, metaclass=ABCMeta):
             tuple[float]: the updated ``iou_thr`` and ``beta``.
         """
         new_iou_thr = max(self.train_cfg[stage].dynamic_rcnn.initial_iou,
-                          np.mean(self.iou_history))
-        self.iou_history = []
+                          np.mean(self.iou_history[stage]))
+        self.iou_history[stage] = []
         # Just update positive thr
         self.bbox_assigner[stage].pos_iou_thr = new_iou_thr
         self.bbox_assigner[stage].neg_iou_thr = new_iou_thr
         self.bbox_assigner[stage].min_pos_iou = new_iou_thr
 
         if (str(self.bbox_head[stage].loss_bbox) == "SmoothL1Loss()"):
-            if (np.median(self.beta_history) < EPS):
+            if (np.median(self.beta_history[stage]) < EPS):
                 # avoid 0 or too small value for new_beta
                 new_beta = self.bbox_head[stage].loss_bbox.beta
             else:
                 new_beta = min(self.train_cfg[stage].dynamic_rcnn.initial_beta,
-                            np.median(self.beta_history))
-            self.beta_history = []
+                            np.median(self.beta_history[stage]))
+            self.beta_history[stage] = []
             self.bbox_head[stage].loss_bbox.beta = new_beta
         else:
             new_beta = None

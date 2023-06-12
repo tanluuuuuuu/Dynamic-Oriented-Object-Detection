@@ -9,9 +9,13 @@ from mmrotate.core import (build_assigner, build_sampler, obb2xyxy,
                            rbbox2result, rbbox2roi)
 from ..builder import ROTATED_HEADS, build_head, build_roi_extractor
 
+import numpy as np
+import os
+
+EPS = 1e-15
 
 @ROTATED_HEADS.register_module()
-class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
+class DynamicRoITransRoIHeadv2IoUOnly(BaseModule, metaclass=ABCMeta):
     """RoI Trans cascade roi head including one bbox head.
 
     Args:
@@ -43,7 +47,7 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
         assert shared_head is None, \
             'Shared head is not supported in Cascade RCNN anymore'
 
-        super(RoITransRoIHeadExamine, self).__init__(init_cfg)
+        super(DynamicRoITransRoIHeadv2IoUOnly, self).__init__(init_cfg)
         self.num_stages = num_stages
         self.stage_loss_weights = stage_loss_weights
         self.train_cfg = train_cfg
@@ -57,6 +61,8 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
         self.init_assigner_sampler()
 
         self.with_bbox = True if self.bbox_head is not None else False
+        self.iou_history = []
+        self.beta_history = []
 
     def init_bbox_head(self, bbox_roi_extractor, bbox_head):
         """Initialize box head and box roi extractor.
@@ -112,7 +118,7 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                 outs = outs + (bbox_results['cls_score'],
                                bbox_results['bbox_pred'])
         return outs
-
+    
     def _bbox_forward(self, stage, x, rois):
         """Box head forward function used in both training and testing.
 
@@ -132,10 +138,55 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
 
         bbox_results = dict(
             cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+        '''
+            return cls_score, bbox_pred
+        '''
         return bbox_results
 
+    # def bbox2roi(bbox_list):
+    #     """Convert a list of bboxes to roi format.
+
+    #     Args:
+    #         bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
+    #             of images.
+
+    #     Returns:
+    #         Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+    #     """
+    #     rois_list = []
+    #     for img_id, bboxes in enumerate(bbox_list):
+    #         if bboxes.size(0) > 0:
+    #             img_inds = bboxes.new_full((bboxes.size(0), 1), img_id)
+    #             rois = torch.cat([img_inds, bboxes[:, :4]], dim=-1)
+    #         else:
+    #             rois = bboxes.new_zeros((0, 5))
+    #         rois_list.append(rois)
+    #     rois = torch.cat(rois_list, 0)
+    #     return rois
+    
+    # def rbbox2roi(bbox_list):
+    #     """Convert a list of bboxes to roi format.
+
+    #     Args:
+    #         bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
+    #             of images.
+
+    #     Returns:
+    #         Tensor: shape (n, 6), [batch_ind, cx, cy, w, h, a]
+    #     """
+    #     rois_list = []
+    #     for img_id, bboxes in enumerate(bbox_list):
+    #         if bboxes.size(0) > 0:
+    #             img_inds = bboxes.new_full((bboxes.size(0), 1), img_id)
+    #             rois = torch.cat([img_inds, bboxes[:, :5]], dim=-1)
+    #         else:
+    #             rois = bboxes.new_zeros((0, 6))
+    #         rois_list.append(rois)
+    #     rois = torch.cat(rois_list, 0)
+    #     return rois
+
     def _bbox_forward_train(self, stage, x, sampling_results, gt_bboxes,
-                            gt_labels, rcnn_train_cfg):
+                            gt_labels, rcnn_train_cfg, img_metas, is_dynamic):
         """Run forward function and calculate loss for box head in training.
 
         Args:
@@ -153,11 +204,31 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
         """
         if stage == 0:
             rois = bbox2roi([res.bboxes for res in sampling_results])
+            '''
+            Returns:
+                Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+            '''
         else:
             rois = rbbox2roi([res.bboxes for res in sampling_results])
+            '''
+            Returns:
+                Tensor: shape (n, 6), [batch_ind, cx, cy, w, h, a]
+            '''
         bbox_results = self._bbox_forward(stage, x, rois)
         bbox_targets = self.bbox_head[stage].get_targets(
             sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg)
+        
+        # if (is_dynamic):
+        #     # breakpoint()
+        #     num_imgs = len(img_metas)
+        #     pos_inds = bbox_targets[3][:, 0].nonzero().squeeze(1)
+        #     num_pos = len(pos_inds)
+        #     cur_target = bbox_targets[2][pos_inds, :2].abs().mean(dim=1)
+        #     beta_topk = min(self.train_cfg[stage].dynamic_rcnn.beta_topk * num_imgs,
+        #                     num_pos)
+        #     cur_target = torch.kthvalue(cur_target, beta_topk)[0].item()
+        #     self.beta_history.append(cur_target)
+        
         loss_bbox = self.bbox_head[stage].loss(bbox_results['cls_score'],
                                                bbox_results['bbox_pred'], rois,
                                                *bbox_targets)
@@ -203,13 +274,15 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
 
             # assign gts and sample proposals
             sampling_results = []
+            cur_iou = []
+            
             if self.with_bbox:
                 bbox_assigner = self.bbox_assigner[i]
                 bbox_sampler = self.bbox_sampler[i]
                 num_imgs = len(img_metas)
                 if gt_bboxes_ignore is None:
                     gt_bboxes_ignore = [None for _ in range(num_imgs)]
-                # breakpoint()
+
                 for j in range(num_imgs):
                     if i == 0:
                         gt_tmp_bboxes = obb2xyxy(gt_bboxes[j], self.version)
@@ -224,18 +297,13 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                         gt_tmp_bboxes,
                         gt_labels[j],
                         feats=[lvl_feat[j][None] for lvl_feat in x])
-                    
-                    # if i == 0:
-                    #     ll = []
-                    #     for ii in range(60, 101):
-                    #         iou_topk = min(ii, len(assign_result.max_overlaps))
-                    #         ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
-                    #         ll.append(str(ious[-1].item()))
-                        # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_exam_distributions/iou.bin", 'ab')
-                        # byte_string = bytes(f"{', '.join(ll)}\n", 'ascii')
-                        # f.write(byte_string)
-                        # f.close()
 
+                    if 'dynamic_rcnn' in self.train_cfg[i]:
+                        iou_topk = min(self.train_cfg[i].dynamic_rcnn.iou_topk,
+                                    len(assign_result.max_overlaps))
+                        ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
+                        cur_iou.append(ious[-1].item())
+                    
                     if gt_bboxes[j].numel() == 0:
                         sampling_result.pos_gt_bboxes = gt_bboxes[j].new(
                             (0, gt_bboxes[0].size(-1))).zero_()
@@ -243,35 +311,24 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                         sampling_result.pos_gt_bboxes = \
                             gt_bboxes[j][
                                 sampling_result.pos_assigned_gt_inds, :]
-                        
-                    if i == 0:
-                        # Record num pos bboxes
-                        f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/num_pos_bbox.txt", 'a')
-                        f.write(f"{img_metas[0]['filename']} {len(sampling_result.pos_gt_bboxes)}\n")
-                        f.close()
 
                     sampling_results.append(sampling_result)
-                    # if i == 0:
-                    #     f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/check_num_pos_1000e.txt", 'a')
-                    #     f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
-                    #     f.close()
-                        # iou_topk = min(75, len(assign_result.max_overlaps))
-                        # ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
-                        # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/75thIoU.txt", 'a')
-                        # f.write(f"{ious[-1].item()}\n")
-                        # f.close()
 
+                if 'dynamic_rcnn' in self.train_cfg[i]:
+                    cur_iou = np.mean(cur_iou)
+                    self.iou_history.append(cur_iou)
             # bbox head forward and loss
             bbox_results = self._bbox_forward_train(i, x, sampling_results,
                                                     gt_bboxes, gt_labels,
-                                                    rcnn_train_cfg)
+                                                    rcnn_train_cfg,
+                                                    img_metas,
+                                                    is_dynamic = 'dynamic_rcnn' in self.train_cfg[i])
 
             for name, value in bbox_results['loss_bbox'].items():
                 losses[f's{i}.{name}'] = (
                     value * lw if 'loss' in name else value)
-
+            
             # refine bboxes
-            # breakpoint()    
             if i < self.num_stages - 1:
                 pos_is_gts = [res.pos_is_gt for res in sampling_results]
                 # bbox_targets is a tuple
@@ -284,13 +341,19 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                     roi_labels = torch.where(
                         roi_labels == self.bbox_head[i].num_classes,
                         cls_score[:, :-1].argmax(1), roi_labels)
+                    # https://github.com/open-mmlab/mmdetection/issues/6455
                     proposal_list = self.bbox_head[i].refine_bboxes(
                         bbox_results['rois'], roi_labels,
                         bbox_results['bbox_pred'], pos_is_gts, img_metas)
-                    # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_exam_distributions/distributions.bin", 'ab')
-                    # byte_string2 = bytes(f"{', '.join([str(x) for x in proposal_list[0].ravel().cpu().numpy()])}\n", 'ascii')
-                    # f.write(byte_string2)
-                    # f.close()
+                    
+            if 'dynamic_rcnn' in self.train_cfg[i]:
+                update_iter_interval = self.train_cfg[i].dynamic_rcnn.update_iter_interval
+                if len(self.iou_history) % update_iter_interval == 0:
+                    new_iou_thr, new_beta = self.update_hyperparameters(i)
+                    # Writing data to a file
+                    f = open(os.path.join(self.train_cfg[i].dynamic_rcnn.save_dir, "update_hyperparameters.txt"), 'a')
+                    f.write(f"{str(new_iou_thr)}, {str(new_beta)} \n")
+                    f.close()
         return losses
 
     def simple_test(self, x, proposal_list, img_metas, rescale=False):
@@ -384,3 +447,31 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
     def aug_test(self, features, proposal_list, img_metas, rescale=False):
         """Test with augmentations."""
         raise NotImplementedError
+    
+    def update_hyperparameters(self, stage):
+        """Update hyperparameters like IoU thresholds for assigner and beta for
+        SmoothL1 loss based on the training statistics.
+
+        Returns:
+            tuple[float]: the updated ``iou_thr`` and ``beta``.
+        """
+        new_iou_thr = max(self.train_cfg[stage].dynamic_rcnn.initial_iou,
+                          np.mean(self.iou_history))
+        self.iou_history = []
+        # Just update positive thr
+        self.bbox_assigner[stage].pos_iou_thr = new_iou_thr
+        self.bbox_assigner[stage].neg_iou_thr = new_iou_thr
+        self.bbox_assigner[stage].min_pos_iou = new_iou_thr
+
+        # if (str(self.bbox_head[stage].loss_bbox) == "SmoothL1Loss()"):
+        #     if (np.median(self.beta_history) < EPS):
+        #         # avoid 0 or too small value for new_beta
+        #         new_beta = self.bbox_head[stage].loss_bbox.beta
+        #     else:
+        #         new_beta = min(self.train_cfg[stage].dynamic_rcnn.initial_beta,
+        #                     np.median(self.beta_history))
+        #     self.beta_history = []
+        #     self.bbox_head[stage].loss_bbox.beta = new_beta
+        # else:
+        #     new_beta = None
+        return new_iou_thr, self.bbox_head[stage].loss_bbox.beta

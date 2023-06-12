@@ -11,7 +11,7 @@ from ..builder import ROTATED_HEADS, build_head, build_roi_extractor
 
 
 @ROTATED_HEADS.register_module()
-class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
+class RoITransRoIHeadExamineRegression(BaseModule, metaclass=ABCMeta):
     """RoI Trans cascade roi head including one bbox head.
 
     Args:
@@ -43,7 +43,7 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
         assert shared_head is None, \
             'Shared head is not supported in Cascade RCNN anymore'
 
-        super(RoITransRoIHeadExamine, self).__init__(init_cfg)
+        super(RoITransRoIHeadExamineRegression, self).__init__(init_cfg)
         self.num_stages = num_stages
         self.stage_loss_weights = stage_loss_weights
         self.train_cfg = train_cfg
@@ -152,6 +152,7 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
             dict[str, Tensor]: a dictionary of bbox_results.
         """
         if stage == 0:
+            breakpoint()
             rois = bbox2roi([res.bboxes for res in sampling_results])
         else:
             rois = rbbox2roi([res.bboxes for res in sampling_results])
@@ -224,17 +225,6 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                         gt_tmp_bboxes,
                         gt_labels[j],
                         feats=[lvl_feat[j][None] for lvl_feat in x])
-                    
-                    # if i == 0:
-                    #     ll = []
-                    #     for ii in range(60, 101):
-                    #         iou_topk = min(ii, len(assign_result.max_overlaps))
-                    #         ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
-                    #         ll.append(str(ious[-1].item()))
-                        # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_exam_distributions/iou.bin", 'ab')
-                        # byte_string = bytes(f"{', '.join(ll)}\n", 'ascii')
-                        # f.write(byte_string)
-                        # f.close()
 
                     if gt_bboxes[j].numel() == 0:
                         sampling_result.pos_gt_bboxes = gt_bboxes[j].new(
@@ -243,23 +233,8 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                         sampling_result.pos_gt_bboxes = \
                             gt_bboxes[j][
                                 sampling_result.pos_assigned_gt_inds, :]
-                        
-                    if i == 0:
-                        # Record num pos bboxes
-                        f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/num_pos_bbox.txt", 'a')
-                        f.write(f"{img_metas[0]['filename']} {len(sampling_result.pos_gt_bboxes)}\n")
-                        f.close()
 
                     sampling_results.append(sampling_result)
-                    # if i == 0:
-                    #     f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/check_num_pos_1000e.txt", 'a')
-                    #     f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
-                    #     f.close()
-                        # iou_topk = min(75, len(assign_result.max_overlaps))
-                        # ious, _ = torch.topk(assign_result.max_overlaps, iou_topk)
-                        # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_examine/75thIoU.txt", 'a')
-                        # f.write(f"{ious[-1].item()}\n")
-                        # f.close()
 
             # bbox head forward and loss
             bbox_results = self._bbox_forward_train(i, x, sampling_results,
@@ -287,10 +262,6 @@ class RoITransRoIHeadExamine(BaseModule, metaclass=ABCMeta):
                     proposal_list = self.bbox_head[i].refine_bboxes(
                         bbox_results['rois'], roi_labels,
                         bbox_results['bbox_pred'], pos_is_gts, img_metas)
-                    # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/roi_trans_r50_fpn_1x_dota_le90_exam_distributions/distributions.bin", 'ab')
-                    # byte_string2 = bytes(f"{', '.join([str(x) for x in proposal_list[0].ravel().cpu().numpy()])}\n", 'ascii')
-                    # f.write(byte_string2)
-                    # f.close()
         return losses
 
     def simple_test(self, x, proposal_list, img_metas, rescale=False):

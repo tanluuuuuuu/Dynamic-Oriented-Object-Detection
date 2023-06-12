@@ -131,14 +131,14 @@ def train_detector(model,
         runner.register_hook(
             eval_hook(val_dataloader, **eval_cfg), priority='LOW')
 
-    resume_from = None
-    if cfg.resume_from is None and cfg.get('auto_resume'):
-        resume_from = find_latest_checkpoint(cfg.work_dir)
-    if resume_from is not None:
-        cfg.resume_from = resume_from
+    # resume_from = None
+    # if cfg.resume_from is None and cfg.get('auto_resume'):
+    #     resume_from = find_latest_checkpoint(cfg.work_dir)
+    # if resume_from is not None:
+    #     cfg.resume_from = resume_from
 
-    if cfg.resume_from:
-        runner.resume(cfg.resume_from)
-    elif cfg.load_from:
-        runner.load_checkpoint(cfg.load_from)
+    # if cfg.resume_from:
+    #     runner.resume(cfg.resume_from)
+    # elif cfg.load_from:
+    #     runner.load_checkpoint(cfg.load_from)
     runner.run(data_loaders, cfg.workflow)

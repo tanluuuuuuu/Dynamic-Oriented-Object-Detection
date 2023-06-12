@@ -86,6 +86,8 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
                 # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_num_pos.txt", 'a')
                 # f.write(f"{len(sampling_result.pos_gt_bboxes)}\n")
                 # f.close()
+                # breakpoint()
+
         # bbox_results['bbox_pred']
         # bbox_results['cls_score']
         # torch.mean(bbox_results['bbox_pred'][:, 0]).item()
@@ -97,7 +99,7 @@ class OrientedStandardRoIHeadExamine(RotatedStandardRoIHead):
                                                     gt_bboxes, gt_labels,
                                                     img_metas)
             losses.update(bbox_results['loss_bbox'])
-            f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_xywha.txt", 'a')
+            # f = open("/home/tanluuuuuuu/Desktop/luunvt/oriented_object_detection/mmrotate/work_dirs/oriented_rcnn_r50_fpn_1x_dota_le90_examine/check_xywha.txt", 'a')
             for box in bbox_results['bbox_pred']:
                 f.write(f"{box[0]}\t{box[1]}\t{box[2]}\t{box[3]}\t{box[4]}\n")
             f.close()
